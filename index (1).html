@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Object Detector</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+  <style>
+    :root { --g:#00ff88; --r:#ff3366; --bg:#050a0e; --panel:#0a1520; --border:#0f2a40; --text:#a0c8d8; }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:16px;}
+    .container{width:100%;max-width:600px;}
+    .title{font-family:'Orbitron',monospace;font-size:clamp(1.1rem,6vw,1.8rem);font-weight:900;color:var(--g);text-shadow:0 0 20px rgba(0,255,136,0.5);letter-spacing:3px;text-align:center;margin-bottom:4px;}
+    .sub{font-size:0.65rem;color:#3a6a7a;letter-spacing:2px;text-align:center;margin-bottom:12px;}
+    .line{width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--g),transparent);opacity:.4;margin-bottom:12px;}
+
+    .status{display:flex;justify-content:space-between;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:8px 14px;margin-bottom:8px;font-size:0.68rem;}
+    .dot{width:8px;height:8px;border-radius:50%;background:#2a4a5a;display:inline-block;margin-right:7px;transition:all .3s;}
+    .dot.on{background:var(--g);box-shadow:0 0 8px var(--g);animation:p 1.2s infinite;}
+    .dot.load{background:#ffaa00;box-shadow:0 0 8px #ffaa00;}
+    @keyframes p{0%,100%{opacity:1}50%{opacity:.3}}
+    .badge{font-family:'Orbitron',monospace;font-size:0.75rem;color:var(--g);}
+
+    .cam-row{display:flex;gap:8px;margin-bottom:8px;}
+    .cam-btn{flex:1;padding:7px;border:1px solid var(--border);background:var(--panel);color:#3a6a7a;font-family:'Share Tech Mono',monospace;font-size:0.68rem;border-radius:6px;cursor:pointer;transition:all .2s;letter-spacing:1px;}
+    .cam-btn.on{border-color:var(--g);color:var(--g);background:rgba(0,255,136,.05);}
+
+    .vid-wrap{position:relative;width:100%;background:#000;border-radius:8px;overflow:hidden;border:1px solid var(--border);aspect-ratio:4/3;}
+    .corner{position:absolute;width:14px;height:14px;border-color:var(--g);border-style:solid;opacity:.7;z-index:10;}
+    .corner.tl{top:6px;left:6px;border-width:2px 0 0 2px;}
+    .corner.tr{top:6px;right:6px;border-width:2px 2px 0 0;}
+    .corner.bl{bottom:6px;left:6px;border-width:0 0 2px 2px;}
+    .corner.br{bottom:6px;right:6px;border-width:0 2px 2px 0;}
+    .ot{position:absolute;top:8px;left:50%;transform:translateX(-50%);font-family:'Orbitron',monospace;font-size:.55rem;letter-spacing:2px;color:rgba(0,255,136,.35);z-index:10;white-space:nowrap;}
+    .fps{position:absolute;bottom:6px;right:8px;font-size:.58rem;color:rgba(0,255,136,.3);z-index:10;}
+    #video{width:100%;height:100%;display:block;object-fit:cover;}
+    #canvas{position:absolute;top:0;left:0;width:100%;height:100%;}
+
+    .btns{display:flex;gap:8px;margin-top:8px;}
+    button{flex:1;padding:10px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-family:'Share Tech Mono',monospace;font-size:.75rem;letter-spacing:2px;text-transform:uppercase;border-radius:6px;cursor:pointer;transition:all .2s;}
+    button:hover:not(:disabled){border-color:var(--g);color:var(--g);}
+    button:disabled{opacity:.3;cursor:not-allowed;}
+    #bs{border-color:rgba(0,255,136,.4);color:var(--g);}
+    #bx{border-color:rgba(255,51,102,.3);color:var(--r);}
+
+    .slider-row{display:flex;align-items:center;gap:10px;margin-top:8px;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:9px 14px;font-size:.65rem;}
+    .slider-row label{color:#3a6a7a;white-space:nowrap;}
+    input[type=range]{flex:1;accent-color:var(--g);}
+    #cv{color:var(--g);font-family:'Orbitron',monospace;min-width:34px;text-align:right;}
+
+    .tags-box{margin-top:8px;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:10px 14px;min-height:44px;}
+    .tags-title{font-size:.6rem;color:#3a6a7a;letter-spacing:2px;margin-bottom:6px;}
+    .tags{display:flex;flex-wrap:wrap;gap:5px;}
+    .tag{padding:3px 8px;border-radius:4px;font-size:.62rem;letter-spacing:1px;text-transform:uppercase;border:1px solid;}
+
+    .log{margin-top:8px;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:8px 14px;max-height:80px;overflow-y:auto;font-size:.6rem;line-height:1.9;}
+    .le{color:#3a6a7a;} .le.ok{color:var(--g);} .le.w{color:#ffaa00;}
+    .le em{color:#2a4a5a;margin-right:6px;font-style:normal;}
+
+    footer{margin-top:14px;text-align:center;font-size:.55rem;color:#1a3a4a;letter-spacing:2px;}
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="title">AI OBJECT DETECTOR</div>
+  <div class="sub">80 класс · Нақты уақыт · COCO-SSD · TensorFlow.js</div>
+  <div class="line"></div>
+
+  <div class="status">
+    <div><span class="dot" id="dot"></span><span id="st">MODEL ЖҮКТЕЛУДЕ...</span></div>
+    <div class="badge" id="badge">OBJECTS: 0</div>
+  </div>
+
+  <div class="cam-row">
+    <button class="cam-btn on" id="cb">📷 АРТҚЫ</button>
+    <button class="cam-btn" id="cf">🤳 АЛДЫҢҒЫ</button>
+  </div>
+
+  <div class="vid-wrap">
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+    <div class="ot">LIVE · AI VISION ACTIVE</div>
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="canvas"></canvas>
+    <div class="fps" id="fps">-- FPS</div>
+  </div>
+
+  <div class="btns">
+    <button id="bs" disabled>▶ СТАРТ</button>
+    <button id="bx" disabled>■ СТОП</button>
+  </div>
+
+  <div class="slider-row">
+    <label>СЕНІМДІЛІК</label>
+    <input type="range" id="cs" min="10" max="80" value="25"/>
+    <span id="cv">25%</span>
+  </div>
+
+  <div class="tags-box">
+    <div class="tags-title">АНЫҚТАЛҒАН ЗАТТАР</div>
+    <div class="tags" id="tags"><span style="color:#2a4a5a">—</span></div>
+  </div>
+
+  <div class="log" id="log">
+    <div class="le"><em>SYS</em>TensorFlow.js жүктелуде...</div>
+  </div>
+
+  <footer>FINAL PROJECT · AI &amp; PROMPT ENGINEERING · 2026</footer>
+</div>
+
+<script>
+const vid=document.getElementById('video'),cvs=document.getElementById('canvas'),ctx=cvs.getContext('2d');
+const dot=document.getElementById('dot'),st=document.getElementById('st'),badge=document.getElementById('badge');
+const tags=document.getElementById('tags'),logEl=document.getElementById('log'),fpsEl=document.getElementById('fps');
+const bs=document.getElementById('bs'),bx=document.getElementById('bx'),cs=document.getElementById('cs'),cv=document.getElementById('cv');
+const cb=document.getElementById('cb'),cf=document.getElementById('cf');
+
+let model=null,animId=null,running=false,t0=performance.now(),fc=0,face='environment',minC=0.25;
+const colors={};
+const pal=['#00ff88','#00aaff','#ff6600','#ff00cc','#ffdd00','#aa00ff','#00ffee','#ff4444','#88ff00','#ff8800','#ff66aa','#66ffaa'];
+const getC=c=>{if(!colors[c])colors[c]=pal[Object.keys(colors).length%pal.length];return colors[c];};
+
+function log(msg,t=''){
+  const el=document.createElement('div');
+  el.className='le '+t;
+  el.innerHTML=`<em>${new Date().toTimeString().slice(0,8)}</em>${msg}`;
+  logEl.appendChild(el);logEl.scrollTop=logEl.scrollHeight;
+  if(logEl.children.length>20)logEl.removeChild(logEl.firstChild);
+}
+
+cs.oninput=()=>{minC=parseInt(cs.value)/100;cv.textContent=cs.value+'%';};
+
+cb.onclick=()=>{face='environment';cb.classList.add('on');cf.classList.remove('on');if(running){stop();setTimeout(start,400);}};
+cf.onclick=()=>{face='user';cf.classList.add('on');cb.classList.remove('on');if(running){stop();setTimeout(start,400);}};
+
+async function loadModel(){
+  dot.className='dot load';st.textContent='MODEL ЖҮКТЕЛУДЕ...';
+  log('COCO-SSD lite модель жүктелуде...','w');
+  try{
+    // Use lite_mobilenet_v2 for speed on mobile
+    model=await cocoSsd.load({base:'lite_mobilenet_v2'});
+    dot.className='dot';st.textContent='ДАЙЫН · СТАРТ БАСЫҢЫЗ';
+    bs.disabled=false;
+    log('Модель дайын! Жеңіл нұсқа (жылдам) ✓','ok');
+  }catch(e){log('Қате: '+e.message,'w');}
+}
+
+async function start(){
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:face,width:{ideal:640},height:{ideal:480}}
+    });
+    vid.srcObject=stream;
+    await new Promise(r=>vid.onloadedmetadata=r);
+    cvs.width=vid.videoWidth;cvs.height=vid.videoHeight;
+    running=true;bs.disabled=true;bx.disabled=false;
+    dot.className='dot on';st.textContent='СКАНЕРЛЕУДЕ...';
+    log(`Камера қосылды [${face==='environment'?'АРТҚЫ':'АЛДЫҢҒЫ'}]`,'ok');
+    loop();
+  }catch(e){log('Камера қатесі: '+e.message,'w');st.textContent='КАМЕРА ҚАТЕСІ';}
+}
+
+function stop(){
+  running=false;cancelAnimationFrame(animId);
+  if(vid.srcObject){vid.srcObject.getTracks().forEach(t=>t.stop());vid.srcObject=null;}
+  ctx.clearRect(0,0,cvs.width,cvs.height);
+  dot.className='dot';st.textContent='ТОҚТАДЫ';
+  bs.disabled=false;bx.disabled=true;
+  badge.textContent='OBJECTS: 0';
+  tags.innerHTML='<span style="color:#2a4a5a">—</span>';
+  log('Тоқтатылды.','');
+}
+
+async function loop(){
+  if(!running)return;
+  fc++;const now=performance.now();
+  if(now-t0>=1000){fpsEl.textContent=fc+' FPS';fc=0;t0=now;}
+
+  try{
+    const preds=await model.detect(vid,15,minC);
+    ctx.clearRect(0,0,cvs.width,cvs.height);
+    const seen={};
+
+    preds.forEach(p=>{
+      const[x,y,w,h]=p.bbox,conf=Math.round(p.score*100),col=getC(p.class);
+
+      // Box
+      ctx.shadowColor=col;ctx.shadowBlur=12;
+      ctx.strokeStyle=col;ctx.lineWidth=2;
+      ctx.strokeRect(x,y,w,h);ctx.shadowBlur=0;
+
+      // Corners
+      const s=10;ctx.strokeStyle='#fff';ctx.lineWidth=1.5;
+      [[x,y],[x+w,y],[x,y+h],[x+w,y+h]].forEach(([cx,cy])=>{
+        ctx.beginPath();
+        ctx.moveTo(cx+(cx===x?s:-s),cy);ctx.lineTo(cx,cy);ctx.lineTo(cx,cy+(cy===y?s:-s));
+        ctx.stroke();
+      });
+
+      // Label
+      const lbl=`${p.class.toUpperCase()} ${conf}%`;
+      ctx.font='bold 11px monospace';
+      const tw=ctx.measureText(lbl).width+10;
+      ctx.fillStyle=col;ctx.fillRect(x,y-20,tw,20);
+      ctx.fillStyle='#000';ctx.fillText(lbl,x+5,y-5);
+
+      seen[p.class]=(seen[p.class]||0)+1;
+    });
+
+    badge.textContent=`OBJECTS: ${preds.length}`;
+    if(preds.length===0){
+      tags.innerHTML='<span style="color:#2a4a5a">Заттарға бағыттаңыз...</span>';
+    } else {
+      tags.innerHTML=Object.entries(seen).map(([k,v])=>{
+        const c=getC(k);
+        return `<span class="tag" style="color:${c};border-color:${c}44;background:${c}11">${k} ×${v}</span>`;
+      }).join('');
+    }
+  }catch(e){console.error(e);}
+
+  animId=requestAnimationFrame(loop);
+}
+
+bs.addEventListener('click',start);
+bx.addEventListener('click',stop);
+loadModel();
+</script>
+</body>
+</html>
